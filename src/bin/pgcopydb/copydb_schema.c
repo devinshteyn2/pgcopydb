@@ -139,31 +139,32 @@ copydb_fetch_schema_and_prepare_specs(CopyDataSpec *specs)
 		log_info("Fetched information for %d collations", collationArray->count);
 	}
 
-	/* now fetch the list of tables from the source database */
+	/*
+	 * First, if it doesn't exist yet, create the pgcopydb.table_size table.
+	 * Keep track of whether we had to create that table, if we did, it is
+	 * expected that we DROP it before the end of this transaction.
+	 *
+	 * In order to allow for users to prepare that table in advance, we do not
+	 * use a TEMP table here.
+	 */
 	bool createdTableSizeTable = false;
 
+	/* copydb_fetch_filtered_oids() needs the table size table around */
+	if (!schema_prepare_pgcopydb_table_size(src,
+											&(specs->filters),
+											specs->hasDBCreatePrivilege,
+											false, /* cache */
+											false, /* dropCache */
+											&createdTableSizeTable))
+	{
+		/* errors have already been logged */
+		return false;
+	}
+
+	/* now fetch the list of tables from the source database */
 	if (specs->section == DATA_SECTION_ALL ||
 		specs->section == DATA_SECTION_TABLE_DATA)
 	{
-		/*
-		 * First, if it doesn't exist yet, create the pgcopydb.table_size
-		 * table. Keep track of whether we had to create that table, if we did,
-		 * it is expected that we DROP it before the end of this transaction.
-		 *
-		 * In order to allow for users to prepare that table in advance, we do
-		 * not use a TEMP table here.
-		 */
-		if (!schema_prepare_pgcopydb_table_size(src,
-												&(specs->filters),
-												specs->hasDBCreatePrivilege,
-												false, /* cache */
-												false, /* dropCache */
-												&createdTableSizeTable))
-		{
-			/* errors have already been logged */
-			return false;
-		}
-
 		if (!copydb_prepare_table_specs(specs, src))
 		{
 			/* errors have already been logged */
@@ -434,7 +435,7 @@ copydb_prepare_index_specs(CopyDataSpec *specs, PGSQL *pgsql)
 		{
 			SourceIndex *index = &(indexArray->array[i]);
 
-			/* add the current table to the index Hash-by-OID */
+			/* add the current index to the index Hash-by-OID */
 			HASH_ADD(hh, sourceIndexHashByOid, indexOid, sizeof(uint32_t), index);
 
 			/* find the index table, update its index list */

@@ -42,8 +42,9 @@ queue_create(Queue *queue, char *name)
 		return false;
 	}
 
-	log_debug("Created message %s queue %d (cleanup with ipcrm -q)",
+	log_debug("Created message %s queue %d (cleanup with `ipcrm -q %d`)",
 			  queue->name,
+			  queue->qId,
 			  queue->qId);
 
 	return true;
@@ -147,6 +148,31 @@ queue_receive(Queue *queue, QMessage *msg)
 				  queue->qId);
 		return false;
 	}
+
+	return true;
+}
+
+
+/*
+ * queue_stats retrieves statistics from the queue.
+ */
+bool
+queue_stats(Queue *queue, QueueStats *stats)
+{
+	struct msqid_ds ds = { 0 };
+
+	if (msgctl(queue->qId, IPC_STAT, &ds) != 0)
+	{
+		log_error("Failed to get stats for %s message queue %d: %m",
+				  queue->name,
+				  queue->qId);
+		return false;
+	}
+
+	stats->msg_cbytes = ds.msg_cbytes;
+	stats->msg_qnum = ds.msg_qnum;
+	stats->msg_lspid = ds.msg_lspid;
+	stats->msg_lrpid = ds.msg_lrpid;
 
 	return true;
 }

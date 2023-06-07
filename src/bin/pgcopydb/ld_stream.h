@@ -55,7 +55,7 @@ typedef struct LogicalMessageMetadata
 	StreamAction action;
 	uint32_t xid;
 	uint64_t lsn;
-	uint64_t txnCommitLSN;		/* COMMIT LSN of the transaction */
+	uint64_t txnCommitLSN;      /* COMMIT LSN of the transaction */
 	char timestamp[PG_MAX_TIMESTAMP];
 
 	/* our own internal decision making */
@@ -101,7 +101,9 @@ typedef struct StreamContext
 	LogicalMessageMetadata metadata;
 	LogicalMessageMetadata previous;
 
-	uint64_t lastWrite;
+	uint64_t maxWrittenLSN;     /* max LSN written so far to the JSON files */
+
+	uint64_t lastWriteTime;
 
 	Queue *transformQueue;
 	uint32_t WalSegSz;
@@ -481,7 +483,7 @@ bool stream_transform_message(char *message,
 bool stream_transform_rotate(StreamContext *privateContext,
 							 LogicalMessageMetadata *metadata);
 
-bool stream_transform_file(char *jsonfilename, char *sqlfilename);
+bool stream_transform_file(char *jsonfilename, char *sqlfilename, char *dir);
 bool stream_transform_file_at_lsn(StreamSpecs *specs, uint64_t lsn);
 
 bool stream_write_message(FILE *out, LogicalMessage *msg);
@@ -503,6 +505,11 @@ bool parseMessage(LogicalMessage *mesg,
 
 bool streamLogicalTransactionAppendStatement(LogicalTransaction *txn,
 											 LogicalTransactionStatement *stmt);
+
+bool computeTxnMetadataFilename(uint32_t xid,
+								const char *dir,
+								char *filename);
+bool writeTxnMetadataFile(LogicalTransaction *txn, const char *dir);
 
 void FreeLogicalMessage(LogicalMessage *msg);
 void FreeLogicalTransaction(LogicalTransaction *tx);
@@ -557,6 +564,8 @@ bool computeSQLFileName(StreamApplyContext *context);
 
 bool parseSQLAction(const char *query, LogicalMessageMetadata *metadata);
 
+bool parseTxnMetadataFile(const char *filename, LogicalMessageMetadata *metadata);
+
 /* ld_replay */
 bool stream_replay(StreamSpecs *specs);
 bool stream_apply_replay(StreamSpecs *specs);
@@ -574,7 +583,9 @@ bool follow_main_loop(CopyDataSpec *copySpecs, StreamSpecs *streamSpecs);
 bool followDB(CopyDataSpec *copySpecs, StreamSpecs *streamSpecs);
 
 bool follow_reached_endpos(StreamSpecs *streamSpecs, bool *done);
-bool follow_prepare_mode_switch(StreamSpecs *streamSpecs, LogicalStreamMode previousMode);
+bool follow_prepare_mode_switch(StreamSpecs *streamSpecs,
+								LogicalStreamMode previousMode,
+								LogicalStreamMode currentMode);
 
 bool follow_start_subprocess(StreamSpecs *specs, FollowSubProcess *subprocess);
 
